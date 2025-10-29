@@ -1,15 +1,30 @@
 """
-S3DR - Version 1.2.3
+Author: Smol
+E-mail address: kingalexander471@gmail.com
+Liscense: Creative Commons BY-SA
+
+S3DR - Version 1.2.4
 CHANGES:
-Added S3DM file format and conversion
-Added window title and icon
-Added dynamic window size based on screen size
+Began the documentation process
+Started making it into a functional library instead of a standalone script
 """
 import pygame
 import math as Math
 import sys
 pygame.font.init()
-def loadOBJ(filename, color, transform):
+class Transformation():
+    def __init__(self, mode, *args):
+        self.mode=mode
+        self.args=args
+def loadOBJ(filename:str, color:pygame.Color, transform:list[Transformation]):
+    '''
+    ## loadOBJ:
+    Returns an Model object from the given OBJ file
+
+    - filename | A string representing the file path of the .obj file
+    - color | A color type object (str, list, pygame.Color) that represents the base color assigned to a Model
+    - transform | A list of global transformations to apply to the object every frame
+    '''
     vertices:list[Point] = []
     faceData = []
     for line in open(filename, 'r'):
@@ -25,13 +40,21 @@ def loadOBJ(filename, color, transform):
                 v_index = int(v_triplet.split('/')[0])
                 face.append(v_index - 1) 
             faceData.append(tuple(face))
-    return Object(
+    return Model(
         vertices=vertices, 
         faces=faceData, 
         color=color,
         transform=transform
     )
-def loadS3DM(filename, color, transform):
+def loadS3DM(filename:str, color:pygame.Color, transform:Transformation):
+    '''
+    ## loadS3DM:
+    Returns an Model object from the given S3DM file
+
+    - filename | A string representing the file path of the .s3dm file
+    - color | A color type object (str, list, pygame.Color) that represents the base color assigned to a Model
+    - transform | A list of global transformations to apply to the object every frame
+    '''
     import numpy as np
     file = open(filename, "rb").read()
     if(not file[:5] == b"S3DM\n"):
@@ -47,23 +70,18 @@ def loadS3DM(filename, color, transform):
     for n, face in enumerate(faceArrays):
         face = [int.from_bytes(face[i:i+3], "little")-1 for i in range(0, len(face), 3)]
         faces.append(face)
-    return Object(
+    return Model(
         vertices,
         faces,
         color,
         transform=transform
     )
-def keep(cond, array):
+def keep(cond:function, array:list):
     result=[]
     for i in array:
         if(cond(i)):
             result.append(i)
     return result
-
-class Transformation():
-    def __init__(self, mode, *args):
-        self.mode=mode
-        self.args=args
 class Point():
     def __init__(self, x:float|int, y:float|int, z:float|int=False):
         if(z or z==0):
@@ -77,7 +95,7 @@ class Point():
             self.coords=(x,y)
         self.y=y
         self.x=x
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (str(self.coords))
 class Matrix():
     def __init__(self, values:list[list]):
@@ -130,8 +148,6 @@ class Matrix():
     def cross(self, other):
         a = self.matrix
         b = other.matrix
-        
-        # Standard Cross Product components:
         x = a[1][0] * b[2][0] - a[2][0] * b[1][0]
         y = a[2][0] * b[0][0] - a[0][0] * b[2][0]
         z = a[0][0] * b[1][0] - a[1][0] * b[0][0]
@@ -148,7 +164,7 @@ class Matrix():
             return Matrix([[0],[0],[0]])
             
         return Matrix([[x / length], [y / length], [z / length]])
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.matrix)
     def __add__(self, other):
         if(not isinstance(other, (Matrix, Point))):
@@ -164,7 +180,7 @@ class Matrix():
                 row.append(self.matrix[i][o] + other.matrix[i][o])
             result.append(row)
         return(Matrix(result))
-def rotPoint(point:Matrix|Point, angle:float|int=0, axis=False, center:Matrix|Point=Point(0,0,0), deltatime=1):
+def rotPoint(point:Matrix|Point, angle:float|int=0, axis=False, center:Matrix|Point=Point(0,0,0), deltatime=1) -> Point:
     if(isinstance(axis, list)):
         center = axis[1]
         axis  = axis[0]
@@ -175,11 +191,11 @@ def rotPoint(point:Matrix|Point, angle:float|int=0, axis=False, center:Matrix|Po
     if(callable(deltatime)):
         deltatime = deltatime()
     if(not isinstance(point, (Matrix,Point))):
-        raise TypeError(f"'point' argument must be of type Matrix or Point, not of type {type(point)}")
+        raise TypeError(f"'point' argument must be of type Matrix or Point, not of type {type(point).__repr__()}")
     elif(isinstance(point, Point)):
         point = point.matrix
     if(not isinstance(center, (Matrix,Point))):
-        raise TypeError(f"'center' argument must be of type Matrix or Point, not of type {type(point)}")
+        raise TypeError(f"'center' argument must be of type Matrix or Point, not of type {type(point).__repr__()}")
     elif(isinstance(center, Point)):
         center = center.matrix
     point = point-center
@@ -211,7 +227,7 @@ def rotPoint(point:Matrix|Point, angle:float|int=0, axis=False, center:Matrix|Po
         return Matrix([[Math.cos(Math.radians(angle)), -Math.sin(Math.radians(angle))],[Math.sin(Math.radians(angle)),Math.cos(Math.radians(angle))]])*point
     else:
         raise ValueError("Given matrix is improperly formatted to be a 2d or 3d point")
-def transformPoint(point:Matrix, mode:str, *args):
+def transformPoint(point:Matrix, mode:str, *args) -> Matrix:
     if(len(args)<2):
         args = args[0]
     if(mode=="rotate"):
@@ -230,7 +246,7 @@ def transformPoint(point:Matrix, mode:str, *args):
             return Matrix([[start[0][0]*args[1][0]],[start[1][0]*args[1][1]],[start[2][0]*args[1][2]]])+args[0]
         else:
             return Matrix([[start[0][0]*args[1][0]],[start[1][0]*args[1][1]]])+args[0]
-def getCenter(verts:list[Point]):
+def getCenter(verts:list[Point]) -> Point:
     x=0
     y=0
     z=0
@@ -243,32 +259,26 @@ def getCenter(verts:list[Point]):
     y=y/total
     z=z/total
     return(Point(x,y,z))
-class Object():
-    def __init__(self, vertices:list[Point], faces, color, transform, objtype=None, texture=None, uv=None):
+class Model():
+    def __init__(self, vertices:list[Point], faces:list[int], color:pygame.Color, transform:Transformation):
         self.vertices = vertices
         self.vertices_DRAW = vertices
         self.faces = faces
         self.color = color
         self.transform=transform
-        self.objtype = objtype
         self.visible = True
-        if(texture):
-            self.texture = texture
-            self.uv = uv
-        else:
-            self.texture = False
-    def moved(self, x, y,z):
+    def moved(self, x:int|float, y:int|float,z:int|float):
         verts=[]
         for vert in self.vertices:
             verts.append(transformPoint(vert.matrix, "translate", [True, [x,y,z]]).toPoint())
-        return Object(
+        return Model(
             verts,
             self.faces,
             self.color,
             self.transform,
             self.objtype
         )
-    def scaled(self, factor):
+    def scaled(self, factor:int|float|list):
         if(isinstance(factor, (float, int))):
             factor = [factor, factor, factor]
         elif(not isinstance(factor, list)):
@@ -276,7 +286,7 @@ class Object():
         verts=[]
         for vert in self.vertices:
             verts.append(transformPoint(vert.matrix, "scale", [Point(0,0,0),factor]).toPoint())
-        return Object(
+        return Model(
             verts,
             self.faces,
             self.color,
@@ -295,7 +305,7 @@ class Object():
         verts=[]
         for vertex in self.vertices:
             verts.append(transformPoint(vertex, "rotate", angle, [axis, center]).toPoint())
-        return Object(
+        return Model(
             verts,
             self.faces,
             self.color,
@@ -327,8 +337,8 @@ camMatrix = Matrix([[Player.camera[0]],[Player.camera[1]],[Player.camera[2]]])
 
 lis2tr=[Transformation("rotate", -1, ["z", lambda: objects[1].center]), Transformation("translate", True, [-1,0,0])]
 global objects
-objects: list[Object]=[
-    Object(
+objects: list[Model]=[
+    Model(
     [
         Point(50, -50, 50),      # 0: (+X, +Y, +Z)
         Point(-50, -50, 50),     # 1: (-X, +Y, +Z)
@@ -352,7 +362,7 @@ for obj in objects:
     Player.totFaces+=len(obj.faces)
 def draw(dt):
     background(screen, "black")
-    drawObjects(dt)
+    drawModels(dt)
     Player.fontTimer+=1
     if(Player.fontTimer>=4):
         Player.font = pygame.font.Font("C:\\Windows\\Fonts\\consolab.ttf", 12).render(f"FPS: {str(round(clock.get_fps())).zfill(3)} | Faces: {str(Player.drawnFaces).zfill(len(str(Player.totFaces)))} ({f"{round((Player.drawnFaces/Player.totFaces)*100)}".zfill(3)}%) | X: {str(round(Player.camera[0])).zfill(3)}  Y: {str(round(Player.camera[1])).zfill(3)}  Z: {str(round(Player.camera[2])).zfill(3)} | Yaw: {str(round(Player.camera[3])).zfill(3)} | Pitch: {str(round(Player.camera[4])).zfill(3)} | Culling: {"On " if Player.cull else "Off"} | Platform: {sys.platform} | PythonVerson: {sys.version.split(" ")[0]} | Version: 1.2.1", False, "#ffffff")
@@ -375,7 +385,7 @@ def faceTexture(obj, face_indices):
     
     return obj.texture.get_at((texX, texY))
 
-def drawObjects(dt):
+def drawModels(dt):
     Player.drawnFaces=0
     #Player.light = rotPoint(Player.light, 0.7, "y", Point(0,0,0))
     drawfaces=[]
@@ -566,13 +576,13 @@ def inputHandling(dt):
     else:
         Player.cull = True
 
-def applyTransformation(obj:Object, mode, *args):
+def applyTransformation(obj:Model, mode, *args):
     tempverts=[]
     for vert in obj.vertices:
         tempverts.append(transformPoint(vert.matrix, mode, args).toPoint())
     obj.vertices = tempverts
 
-def transformObjects(dt):
+def transformModels(dt):
     for obj in objects:
         if(obj.objtype == "updated"):
             obj.update()
@@ -599,6 +609,6 @@ while True:
     dt = clock.tick(10000)/1000
     Player.dt = dt
     inputHandling(dt)
-    transformObjects(dt)
+    transformModels(dt)
     draw(dt)
     camMatrix=Matrix([[Player.camera[0]],[Player.camera[1]],[Player.camera[2]]])
